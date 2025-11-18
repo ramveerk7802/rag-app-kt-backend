@@ -2,16 +2,25 @@ package com.example.rag_app_kt.services.impl
 
 import com.example.rag_app_kt.helper.Helper
 import com.example.rag_app_kt.services.ChatService
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.document.Document
+import org.springframework.ai.vectorstore.SearchRequest
 import org.springframework.ai.vectorstore.VectorStore
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.io.Resource
 import org.springframework.stereotype.Service
 
+
+
 @Service
 class ChatServiceImpl(private val chatClient: ChatClient,private val vectorStore: VectorStore) : ChatService {
 
+
+    companion object{
+        private val logger: Logger = LoggerFactory.getLogger(ChatServiceImpl::class.java)
+    }
     @Value("classpath:/prompts/system-message.st")
     private lateinit var systemMessage: Resource
 
@@ -20,12 +29,25 @@ class ChatServiceImpl(private val chatClient: ChatClient,private val vectorStore
 
     override fun chatTemplate(query: String): String? {
 //        load similar data from vector store
+
+        val searchRequest = SearchRequest.builder()
+            .topK(4)
+            .similarityThreshold(0.2)
+            .query(query)
+            .build()
+        val documents = vectorStore.similaritySearch(searchRequest)
+        val list = documents.stream().map { document->document.text }.toList()
+        val context = list.joinToString(", ")
+
+        logger.info("context : $context")
 //        similar result from user query
 
+//        pass in context
+
         return chatClient.prompt()
-            .system { s->s.text(this.systemMessage) }
+            .system { s->s.text(this.systemMessage).param("documents",context) }
             .user { u->
-            u.text(this.userMessage).param("concept",query)
+            u.text(this.userMessage).param("query",query)
         }.call()
             .content()
     }
